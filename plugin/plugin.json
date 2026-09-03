@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "verfi",
+  "version": "1.0.0",
+  "description": "TCPA consent verification for lead generation. Verify lead consent, pull machine-readable proof, and manage consent sessions via the Verfi API.",
+  "author": {
+    "name": "Verfi",
+    "url": "https://verfi.io"
+  },
+  "homepage": "https://verfi.io",
+  "repository": "https://github.com/Verfi-io/verfi-mcp-server",
+  "license": "MIT",
+  "keywords": ["verfi", "consent", "tcpa", "lead-gen", "compliance", "mcp", "verification"]
+}

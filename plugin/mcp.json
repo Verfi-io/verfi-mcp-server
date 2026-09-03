@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "verfi": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@verfi/mcp-server"],
+      "env": {
+        "VERFI_API_KEY": "${VERFI_API_KEY}"
+      }
+    }
+  }
+}
