@@ -58,6 +58,10 @@ Add to your MCP config:
 | `VERFI_API_KEY` | Yes | Your Verfi secret API key (`sk_...`) |
 | `VERFI_API_URL` | No | API base URL (defaults to `https://api.verfi.io/tenant/v1`) |
 
+## Agent Plugin
+
+This repo also ships a portable [Agent Plugins](https://agent-plugins.org/) v1.0.0 package in [`plugin/`](./plugin) that bundles this MCP server together with the Verfi consent-verification skill. Compatible clients (Cursor, Claude, OpenAI, etc.) can discover and load both from one directory. See [`plugin/README.md`](./plugin/README.md).
+
 ## Quick Start
 
 ```
