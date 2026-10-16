@@ -15,6 +15,12 @@ Verfi captures verifiable proof of consumer consent. Publishers add a script tag
 - Pulling machine-readable proof for disputes
 - Integrating Verfi into an existing lead gen pipeline
 
+## Lead-router integration
+
+For claim gates, PII binding, status mapping and retries, read [references/api-reference.md](references/api-reference.md) before writing the integration. It is the web-session buyer contract. Entry point: https://verfi.io/docs/agent-plugin. Direct REST does not require plugin installation. Native lead-form evidence is a different contract.
+
+Use buyer-selected thresholds and match policy. Validate required PII before claiming; accept only exact successful claim response fields. A proof summary or a claim alone is not a legal-compliance guarantee. Inspect MCP tools/list: older installed releases lack the gates and claim-status tool. Use direct REST when needed.
+
 ## Quick Start
 
 ### 1. Capture Consent (Publisher)
@@ -22,7 +28,7 @@ Verfi captures verifiable proof of consumer consent. Publishers add a script tag
 Add the SDK to any page with a form:
 
 ```html
-<script src="https://sdk.verfi.io/v1/verfi.js" data-key="pk_YOUR_PUBLIC_KEY" async></script>
+<script async src="https://sdk.verfi.io/v2/index.js?field=verfiProof&apiKey=YOUR_PUBLIC_KEY&verticals=auto_insurance"></script>
 ```
 
 The SDK auto-detects forms, records interactions (mouse, clicks, keystrokes, scroll), and generates a Verfi ID (`VF-xxxxxxxx`) on form submission.
@@ -40,6 +46,8 @@ Returns consent status, interaction metrics, form data, device info, and tamper 
 
 ```bash
 curl -X POST -H "Authorization: Bearer sk_YOUR_SECRET_KEY" \
+  -H "Idempotency-Key: REPLACE_WITH_PERSISTED_UUID" \
+  -H "Content-Type: application/json" -d '{"requireRecording":true,"requireVerticals":["auto_insurance"]}' \
   https://api.verfi.io/tenant/v1/sessions/VF-a1b2c3d4/claim
 ```
 
@@ -54,7 +62,7 @@ Two key types:
 | Public | `pk_...` | SDK script tag (client-side) |
 | Secret | `sk_...` | API calls (server-side, Bearer token) |
 
-Secret keys have scopes: `sessions:claim`, `sessions:unclaim`, `sessions:search`, `sessions:proof`, `sessions:expiration`.
+Secret keys have scopes: `sessions:claim`, `sessions:unclaim`, `sessions:search`, `sessions:proof`, `sessions:expiration`, `sessions:quality`.
 
 Generate keys in the [Verfi dashboard](https://app.verfi.io) under Integration > API Keys.
 
@@ -68,6 +76,7 @@ All endpoints require `Authorization: Bearer sk_...` header.
 |--------|------|-------|-------------|
 | GET | `/sessions` | — | List claimed sessions (paginated) |
 | GET | `/sessions/{verfiID}` | `sessions:search` | Look up session, verify PII hashes |
+| GET | `/sessions/{verfiID}/claim-status` | `sessions:search` | Read availability and recording validity; not a reservation |
 | GET | `/sessions/{verfiID}/proof` | `sessions:proof` | Machine-readable proof data |
 | POST | `/sessions/{verfiID}/claim` | `sessions:claim` | Claim session (3-year retention) |
 | POST | `/sessions/{verfiID}/unclaim` | `sessions:unclaim` | Release session (30-day retention) |
@@ -89,10 +98,10 @@ Full API reference: see [references/api-reference.md](references/api-reference.m
 
 1. Receive lead with Verfi ID from publisher
 2. Call `GET /sessions/{verfiID}/proof` to check consent
-3. Verify `consent.given === true` and `consent.tcpa_compliant === true`
-4. Optionally verify PII binding with `GET /sessions/{verfiID}?email={hash}&phone={hash}`
-5. Call `POST /sessions/{verfiID}/claim` to start retention
-6. Contact the consumer with documented consent proof
+3. Inspect `data.consent` evidence against the buyer's policy; do not interpret heuristic flags as a legal determination
+4. If the buyer requires PII binding, call `GET /sessions/{verfiID}?email={hash}&phone={hash}` and require found=true and each selected match=true before claiming
+5. Call `POST /sessions/{verfiID}/claim` with buyer gates and a persisted idempotency key; see the integration contract
+6. Require all selected PII checks and exact claim success before passing the lead; apply the buyer's separate contact/consent policy
 
 ### Dispute: Pull Proof for a Challenged Lead
 
@@ -107,7 +116,7 @@ Full API reference: see [references/api-reference.md](references/api-reference.m
 1. Call `GET /sessions` to list all claimed sessions
 2. For each session, call `GET /sessions/{verfiID}/proof`
 3. Flag sessions where `consent.given === false` or `verification.tamper_detected === true`
-4. Unclaim any sessions that don't meet compliance requirements
+4. Flag failures for the buyer's policy; do not automatically unclaim retained evidence
 
 ## MCP Server
 

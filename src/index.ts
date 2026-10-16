@@ -10,7 +10,8 @@ const API_KEY = process.env.VERFI_API_KEY || "";
 async function apiCall(
   method: string,
   path: string,
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  idempotencyKey?: string
 ): Promise<{ status: number; data: unknown }> {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
@@ -18,6 +19,7 @@ async function apiCall(
     headers: {
       Authorization: `Bearer ${API_KEY}`,
       "Content-Type": "application/json",
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -33,7 +35,7 @@ function textResult(data: unknown) {
 
 const server = new McpServer({
   name: "verfi",
-  version: "0.1.0",
+  version: "0.2.0",
 });
 
 // --- Tools ---
@@ -131,20 +133,31 @@ server.tool(
 );
 
 server.tool(
+  "verfi_get_claim_status",
+  "Read web-session claimMode, claimable and recording validity before claiming. Requires sessions:search. Not a reservation or buyer-gate evaluation; multi mode does not check your existing claim.",
+  { verfiID: z.string().describe("Verfi session ID or proof URL") },
+  async ({ verfiID }) => {
+    const { status, data } = await apiCall("GET", `/sessions/${encodeURIComponent(verfiID)}/claim-status`);
+    return { ...textResult(data), isError: status >= 400 };
+  }
+);
+
+server.tool(
   "verfi_claim_session",
-  "Claim a consent session for your organization. Starts 3-year retention. Use after verifying consent is valid.",
+  "Claim a web session using buyer gates. Requires sessions:claim. Validate required PII separately before calling. Only success=true and data.status=claimed indicates claim success. Reuse the same idempotencyKey and body for identical retries; wallet receipts may replay a historical success without re-evaluating gates.",
   {
     verfiID: z.string().describe("Verfi session ID to claim"),
-    expirationDate: z
-      .string()
-      .optional()
-      .describe("Custom expiration date (ISO 8601). Max 5 years. Defaults to 3 years."),
+    expirationDate: z.string().optional().describe("Optional ISO expiration, default 3 years, maximum 5."),
+    requireRecording: z.boolean().optional().describe("Require valid recording; failure is 409 no_recording."),
+    requireVerticals: z.array(z.string()).min(1).optional().describe("Any overlap with declared verticals passes. Select the vertical for this lead type."),
+    requireVerifiedScore: z.number().min(0).max(1).optional().describe("Minimum cached metadata keyword score against declared starter verticals, not replay analysis."),
+    minQualityScore: z.number().min(0).max(100).optional().describe("Minimum behavioral human-confidence score, higher is more human-like."),
+    idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/).optional().describe("Required for wallet-enrolled tenants. Persist per operation; reuse identical session/body on retries. UUID recommended."),
   },
-  async ({ verfiID, expirationDate }) => {
-    const body: Record<string, unknown> = {};
-    if (expirationDate) body.expirationDate = expirationDate;
-    const { data } = await apiCall("POST", `/sessions/${encodeURIComponent(verfiID)}/claim`, body);
-    return textResult(data);
+  async ({ verfiID, idempotencyKey, ...options }) => {
+    const body = Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined));
+    const { status, data } = await apiCall("POST", `/sessions/${encodeURIComponent(verfiID)}/claim`, body, idempotencyKey);
+    return { ...textResult(data), isError: status >= 400 };
   }
 );
 
@@ -167,9 +180,9 @@ server.tool(
     page: z.number().optional().describe("Page number (default 1)"),
     limit: z.number().optional().describe("Results per page (1-100, default 20)"),
     status: z
-      .enum(["claimed", "unclaimed", "recorded", "expired"])
+      .enum(["claimed", "unclaimed"])
       .optional()
-      .describe("Filter by session status"),
+      .describe("Filter by this tenant's claim status"),
   },
   async ({ page, limit, status }) => {
     const params = new URLSearchParams();
@@ -208,18 +221,19 @@ server.tool(
   },
   async ({ publicKey }) => {
     const key = publicKey || "pk_YOUR_PUBLIC_KEY";
-    const snippet = `<script src="https://sdk.verfi.io/v1/verfi.js" data-key="${key}" async></script>`;
+    const snippet = `<script async src="https://sdk.verfi.io/v2/index.js?field=verfiProof&apiKey=${encodeURIComponent(key)}&verticals=auto_insurance"></script>`;
     const instructions = {
       snippet,
       setup_steps: [
         "1. Add the script tag to your HTML page, before the closing </body> tag",
         "2. The SDK auto-detects forms and begins recording consent sessions",
         "3. Each form submission generates a unique Verfi ID (VF-xxxxxxxx)",
-        "4. Use the tenant API to claim sessions and verify consent",
+        "4. Set the correct vertical for the lander; pass the populated verfiProof field to the buyer",
+        "5. Follow https://verfi.io/docs/agent-plugin for PII validation, gated claims and retries",
       ],
       api_key_note:
         "You need two API keys: a public key (pk_) for the SDK and a secret key (sk_) for the tenant API. Generate both in the Verfi dashboard under Integration > API Keys.",
-      docs_url: "https://verfi.io/docs",
+      docs_url: "https://verfi.io/docs/agent-plugin",
     };
     return textResult(instructions);
   }
