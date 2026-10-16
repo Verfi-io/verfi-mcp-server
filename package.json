@@ -1,7 +1,7 @@
 {
   "name": "@verfi/mcp-server",
-  "version": "0.1.0",
-  "description": "Verfi MCP Server — consent verification tools for AI agents",
+  "version": "0.2.0",
+  "description": "Verfi MCP Server \u2014 consent verification tools for AI agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -10,15 +10,33 @@
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "npm run build && node --test tests/*.test.cjs"
   },
-  "keywords": ["verfi", "mcp", "consent", "tcpa", "lead-gen", "ai-tools"],
+  "keywords": [
+    "verfi",
+    "mcp",
+    "consent",
+    "tcpa",
+    "lead-gen",
+    "ai-tools"
+  ],
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/node": "^20.0.0"
+  },
+  "files": [
+    "dist",
+    "plugin",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
   }
 }

@@ -87,3 +87,9 @@ Generate API keys in the [Verfi dashboard](https://app.verfi.io) under Integrati
 ## License
 
 MIT
+
+## Building a lead-router integration
+
+Start at https://verfi.io/docs/agent-plugin or read the [web-session integration contract](https://verfi.io/docs/agent-integration.md). Direct REST does not require MCP installation.
+
+Updated source adds `verfi_get_claim_status` (`sessions:search`) and claim options `requireRecording`, `requireVerticals`, `requireVerifiedScore`, `minQualityScore`, and `idempotencyKey`. These require the updated server, not just new skill files. Inspect `tools/list`; use REST or `npm install && npm run build` followed by `node /absolute/path/dist/index.js` until the updated npm package is released/installed. PII is a separate `verfi_search_session` lookup before claiming. Proof summaries do not perform a combined acceptance decision; when `verfi_verify_consent` checks hashes it also needs `sessions:search`.

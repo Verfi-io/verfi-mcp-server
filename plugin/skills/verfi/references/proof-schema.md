@@ -23,10 +23,10 @@ The proof endpoint (`GET /sessions/{verfiID}/proof`) returns structured consent 
 |-------|------|-------------|
 | `given` | boolean | Whether consent was detected |
 | `language` | string\|null | Consent language text if captured |
-| `tcpa_compliant` | boolean | Meets TCPA requirements |
+| `tcpa_compliant` | boolean | API consent heuristic flag, not a legal determination |
 | `one_to_one` | boolean | Single-company consent (not shared) |
 
-**Key check:** `consent.given === true && consent.tcpa_compliant === true` means the lead has valid, verifiable TCPA consent.
+**Key check:** These fields summarize captured evidence. They do not establish PII match, successful buyer claim, or the buyer's complete legal/contact policy. Read them under response `data`.
 
 ## Interactions Object
 
