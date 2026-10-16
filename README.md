@@ -9,7 +9,8 @@ MCP server for [Verfi](https://verfi.io) — TCPA consent verification tools for
 | `verfi_verify_consent` | Check if a lead has valid consent. The primary tool for compliance verification. |
 | `verfi_get_proof` | Get full machine-readable consent proof for a session. |
 | `verfi_search_session` | Look up a session by Verfi ID with optional PII hash verification. |
-| `verfi_claim_session` | Claim a session (starts 3-year retention). |
+| `verfi_get_claim_status` | Read claim mode, availability and recording validity (not a reservation). |
+| `verfi_claim_session` | Claim with buyer gates and a persisted idempotency key. |
 | `verfi_unclaim_session` | Release a claimed session. |
 | `verfi_list_sessions` | List your claimed sessions (paginated). |
 | `verfi_update_expiration` | Update a claimed session's expiration date. |
@@ -76,7 +77,7 @@ Agent calls: verfi_verify_consent({ verfiID: "VF-a1b2c3d4" })
 
 Your API key's scopes determine which tools are available:
 
-- `sessions:search` → `verfi_search_session`
+- `sessions:search` → `verfi_search_session`, `verfi_get_claim_status`
 - `sessions:proof` → `verfi_get_proof`, `verfi_verify_consent`
 - `sessions:claim` → `verfi_claim_session`
 - `sessions:unclaim` → `verfi_unclaim_session`

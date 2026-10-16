@@ -76,6 +76,7 @@ All endpoints require `Authorization: Bearer sk_...` header.
 |--------|------|-------|-------------|
 | GET | `/sessions` | — | List claimed sessions (paginated) |
 | GET | `/sessions/{verfiID}` | `sessions:search` | Look up session, verify PII hashes |
+| GET | `/sessions/{verfiID}/claim-status` | `sessions:search` | Read availability and recording validity; not a reservation |
 | GET | `/sessions/{verfiID}/proof` | `sessions:proof` | Machine-readable proof data |
 | POST | `/sessions/{verfiID}/claim` | `sessions:claim` | Claim session (3-year retention) |
 | POST | `/sessions/{verfiID}/unclaim` | `sessions:unclaim` | Release session (30-day retention) |
