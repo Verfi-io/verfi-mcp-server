@@ -24,20 +24,20 @@ test('compiled MCP preserves buyer gates, false/zero, hashes, idempotency and er
     const { tools } = await client.listTools();
     assert.equal(tools.length, 9);
     assert.ok(tools.some(t => t.name === 'verfi_get_claim_status'));
-    const args = { verfiID: 'VF-a1b2c3d4', idempotencyKey: 'fixture-operation-0001', requireRecording: true, requireVerticals: ['auto_insurance'], requireVerifiedScore: 0.2, minQualityScore: 50 };
+    const args = { verfiID: 'VF-a1b2c3d4', idempotencyKey: 'fixture-operation-0001', requireRecording: true, requireVerticals: ['auto_insurance'], requireVerifiedScore: 0.2, minQualityScore: 50, requirePII: ['email', 'phone'], emailHash: 'a'.repeat(64), phoneHash: 'b'.repeat(64), requireClaimMode: 'exclusive' };
     const result = await client.callTool({ name: 'verfi_claim_session', arguments: args });
     assert.equal(result.isError, false);
     assert.deepEqual(JSON.parse(result.content[0].text), payload);
     assert.equal(requests[0].headers['idempotency-key'], args.idempotencyKey);
     assert.equal(requests[0].headers.authorization, 'Bearer sk_fixture');
     assert.equal(requests[0].url, '/tenant/v1/sessions/VF-a1b2c3d4/claim');
-    assert.deepEqual(requests[0].body, { requireRecording: true, requireVerticals: ['auto_insurance'], requireVerifiedScore: 0.2, minQualityScore: 50 });
+    assert.deepEqual(requests[0].body, { requireRecording: true, requireVerticals: ['auto_insurance'], requireVerifiedScore: 0.2, minQualityScore: 50, requirePII: ['email', 'phone'], emailHash: 'a'.repeat(64), phoneHash: 'b'.repeat(64), requireClaimMode: 'exclusive' });
     await client.callTool({ name: 'verfi_claim_session', arguments: args });
     assert.deepEqual(requests[1], requests[0]);
     await client.callTool({ name: 'verfi_claim_session', arguments: { verfiID: args.verfiID, requireRecording: false, requireVerifiedScore: 0, minQualityScore: 0 } });
     assert.deepEqual(requests[2].body, { requireRecording: false, requireVerifiedScore: 0, minQualityScore: 0 });
     const count = requests.length;
-    for (const invalid of [{ minQualityScore: 101 }, { requireVerifiedScore: -1 }, { requireRecording: 'true' }, { requireVerticals: [] }, { idempotencyKey: 'short' }]) {
+    for (const invalid of [{ requirePII: ['email'] }, { emailHash: 'a'.repeat(64) }, { requirePII: ['email', 'email'] }, { requirePII: ['phone'], phoneHash: 'bad' }, { requireClaimMode: 'invalid' }, { minQualityScore: 101 }, { requireVerifiedScore: -1 }, { requireRecording: 'true' }, { requireVerticals: [] }, { idempotencyKey: 'short' }]) {
       const rejected = await client.callTool({ name: 'verfi_claim_session', arguments: { verfiID: args.verfiID, ...invalid } });
       assert.equal(rejected.isError, true);
     }
