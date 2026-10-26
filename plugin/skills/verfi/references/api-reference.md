@@ -2,7 +2,9 @@
 
 Entry point: https://verfi.io/docs/agent-plugin
 OpenAPI: https://api.verfi.io/.well-known/openapi.json
-Scope: SDK-captured web sessions. This guide does not describe native lead-form evidence.
+Scope: SDK-captured web sessions. Native evidence cannot satisfy required captured PII matching (409 `pii_matching_unavailable`).
+
+Release note: single-call PII/mode gates require an API release containing #707. Before enabling them, verify the selected environment's live OpenAPI lists `requirePII` and `requireClaimMode`; older APIs ignore unknown fields. Do not treat this document alone as deployment evidence.
 
 ## Authentication and environments
 
@@ -22,11 +24,11 @@ Pass the populated `verfiProof` field with the lead. The field contains a proof 
 
 1. Require a valid session ID/proof URL. URL-encode the full value if using it as a path parameter, or extract the VF-xxxxxxxx ID.
 2. Optionally read `GET /sessions/{verfiID}/claim-status` before buying. Response is `{ "success": true, "data": { "verfiID": "VF-a1b2c3d4", "claimMode": "multi", "claimable": true, "recordingStatus": "valid", "hasValidRecording": true } }`. An active exclusive claim also exposes `claimedAt`, never the other buyer's identity. This does not reserve a claim, evaluate your thresholds, or check your existing claim in multi mode. The final claim is authoritative.
-3. If PII binding is required, perform the separate lookup below before claiming. This can run on Post when lead data becomes available. Ping can also validate if the required hashes are supplied; it is not an API restriction.
+3. If PII binding is required, send `requirePII` and its matching hashes in the claim body. No preclaim lookup is required. Claim on Post when the hashes are available (or Ping if already supplied).
 4. Claim once, with all desired gates in the same JSON body and a persisted idempotency key.
-5. Accept only HTTP 200 with `success === true` and `data.status === "claimed"` from the claim response, plus any independently required PII checks. Do not search arbitrary response text for "claimed". Do not treat lookup `data.status` or `claimable` as claim success.
+5. Accept only HTTP 200 with `success === true` and `data.status === "claimed"` from the claim response with all required gates in that request. Do not search arbitrary response text for "claimed". Do not treat lookup `data.status` or `claimable` as claim success.
 
-## PII lookup (not a claim-body gate)
+## Optional diagnostic PII lookup
 
 `GET /sessions/{verfiID}?email=<SHA256_HEX>&phone=<SHA256_HEX>`
 
@@ -38,7 +40,7 @@ A successful lookup uses this shape (additional fields omitted):
 {"success":true,"data":{"verfiID":"VF-a1b2c3d4","found":true,"status":"recorded","claimMode":"multi","claim":null,"verification":{"emailMatch":true,"phoneMatch":null}}}
 ```
 
-Require `data.found === true` and each selected match result to be exactly `true`. Omitted checks are null; false/null are not verified matches. Not-found lookups can return HTTP 200 with `found:false`. A mismatch does not itself return 409 or block a later claim. Putting email/phone hashes in the claim body does not perform this check. If the current buyer has a claim, lookup exposes `data.claim.status`; `data.status` remains the session state.
+Require `data.found === true` and each selected match result to be exactly `true`. Omitted checks are null; false/null are not verified matches. Not-found lookups can return HTTP 200 with `found:false`. A mismatch does not itself return 409 or block a later claim. Use the explicit `requirePII` policy with `emailHash`/`phoneHash` in the claim body to enforce matching before a claim/debit. If the current buyer has a claim, lookup exposes `data.claim.status`; `data.status` remains the session state.
 
 ## Claim request
 
@@ -46,22 +48,28 @@ Require `data.found === true` and each selected match result to be exactly `true
 
 ```json
 {
+  "requirePII": ["email", "phone"],
+  "emailHash": "REPLACE_WITH_EXACT_CAPTURE_SHA256_HEX",
+  "phoneHash": "REPLACE_WITH_EXACT_CAPTURE_SHA256_HEX",
+  "requireClaimMode": "exclusive",
   "requireRecording": true,
-  "requireVerticals": ["auto_insurance"],
+  "requireVerticals": ["home_insurance"],
   "requireVerifiedScore": 0.2,
   "minQualityScore": 50
 }
 ```
 
-These are example QA thresholds, not proven defaults for your traffic. All gates are opt-in. For Home use `["home_insurance"]`, not both Auto and Home unless either is genuinely acceptable. The server cannot infer the router's lead type.
+This is a Home Insurance one-call body; replace both hash placeholders with 64 lowercase hexadecimal characters before sending. These are example QA thresholds, not proven defaults for your traffic. All gates are opt-in. For Home use `["home_insurance"]`, not both Auto and Home unless either is genuinely acceptable. The server cannot infer the router's lead type.
 
+- `requirePII`: nonempty, unique array containing `email`, `phone`, or both. Each selected field must have a corresponding `emailHash`/`phoneHash` (64 lowercase hexadecimal SHA-256 characters of the exact captured UTF-8 value). Both means AND. A supplied hash without its selected policy is rejected, not ignored. Missing/malformed required hash: 400 `invalid_pii_hash`; invalid policy: 400 `invalid_pii_requirement`. Missing captured value or unequal hash: 409 `pii_mismatch`. No raw PII or hashes appear in these errors. Native evidence: 409 `pii_matching_unavailable`.
+- `requireClaimMode`: `exclusive` or `multi`. Checks the immutable publisher mode, never changes it. Missing historical publisher mode means `multi`. Omission accepts either mode subject to existing restrictions. Invalid value: 400 `invalid_claim_mode_requirement`; different mode: 409 `claim_mode_mismatch`. A body field named `claimMode` does not set or enforce the mode.
 - `requireRecording`: boolean. When true, requires at least two meaningful clicks, scrolls, or form interactions; mouse movement alone does not count. Failure: 409 `no_recording`.
 - `requireVerticals`: nonempty array of supported vertical labels (custom `x_` labels supported). Any overlap with declared verticals passes. No declaration is a mismatch. This checks labels, not page content. Failure: 409 `intent_mismatch`.
 - `requireVerifiedScore`: number 0–1 inclusive. Cached heuristic keyword score from URL, title, and non-PII form metadata against declared starter verticals; not replay analysis. It averages scores across declared starter verticals, not just the buyer's requested vertical. No declared starter verticals (including custom-only labels) score zero. Failure: 409 `verification_below_threshold`.
 - `minQualityScore`: number 0–100 inclusive (whole numbers recommended). Cached behavioral human-confidence score from event timing, interaction patterns and other signals; higher is more human-like, not a bot-free guarantee. Failure: 409 `quality_below_threshold`.
 - Optional `expirationDate`: ISO date; default three years, maximum five. Invalid/past/out-of-range values fall back with warnings.
 
-For a new web-session claim, the four gates run in the order above, fail-fast. A 409 reports the first failing condition, not every failure. Gate/exclusive rejections do not create a claim or a new claim charge. A router rejecting a lead after a successful claim does not undo that claim or charge.
+After authentication and wallet receipt lookup, a new request resolves the session (404 if absent), validates the new PII/hash/mode inputs, checks mode then PII, and checks session eligibility. The existing web-session gates then run in their unchanged relative order: recording → verticals → verified score → quality score. Native capability/availability rules remain separate. The new mode/PII gates are rechecked inside the claim transaction before claim/debit. All gates are fail-fast. A 409 reports the first failing condition, not every failure. Gate/exclusive rejections do not create a claim or a new claim charge. A router rejecting a lead after a successful claim does not undo that claim or charge.
 
 Successful claim shape (additional fields depend on billing mode):
 

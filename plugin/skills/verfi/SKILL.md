@@ -19,7 +19,7 @@ Verfi captures verifiable proof of consumer consent. Publishers add a script tag
 
 For claim gates, PII binding, status mapping and retries, read [references/api-reference.md](references/api-reference.md) before writing the integration. It is the web-session buyer contract. Entry point: https://verfi.io/docs/agent-plugin. Direct REST does not require plugin installation. Native lead-form evidence is a different contract.
 
-Use buyer-selected thresholds and match policy. Validate required PII before claiming; accept only exact successful claim response fields. A proof summary or a claim alone is not a legal-compliance guarantee. Inspect MCP tools/list: older installed releases lack the gates and claim-status tool. Use direct REST when needed.
+Use buyer-selected thresholds and match policy. Include required PII matching in the claim request; accept only exact successful claim response fields. A proof summary or a claim alone is not a legal-compliance guarantee. Inspect MCP tools/list: older installed releases lack the gates and claim-status tool. Use direct REST when needed.
 
 ## Quick Start
 
@@ -99,7 +99,7 @@ Full API reference: see [references/api-reference.md](references/api-reference.m
 1. Receive lead with Verfi ID from publisher
 2. Call `GET /sessions/{verfiID}/proof` to check consent
 3. Inspect `data.consent` evidence against the buyer's policy; do not interpret heuristic flags as a legal determination
-4. If the buyer requires PII binding, call `GET /sessions/{verfiID}?email={hash}&phone={hash}` and require found=true and each selected match=true before claiming
+4. If the buyer requires PII binding, include `requirePII` and corresponding `emailHash`/`phoneHash` in the claim; verify the selected live API supports these fields first
 5. Call `POST /sessions/{verfiID}/claim` with buyer gates and a persisted idempotency key; see the integration contract
 6. Require all selected PII checks and exact claim success before passing the lead; apply the buyer's separate contact/consent policy
 

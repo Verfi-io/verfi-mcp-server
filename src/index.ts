@@ -35,7 +35,7 @@ function textResult(data: unknown) {
 
 const server = new McpServer({
   name: "verfi",
-  version: "0.2.0",
+  version: "0.3.0",
 });
 
 // --- Tools ---
@@ -144,10 +144,14 @@ server.tool(
 
 server.tool(
   "verfi_claim_session",
-  "Claim a web session using buyer gates. Requires sessions:claim. Validate required PII separately before calling. Only success=true and data.status=claimed indicates claim success. Reuse the same idempotencyKey and body for identical retries; wallet receipts may replay a historical success without re-evaluating gates.",
+  "Claim a web session using buyer gates. Requires sessions:claim. Use requirePII with exact-capture hashes to enforce matching in this call; requireClaimMode checks, never changes, publisher mode. Only success=true and data.status=claimed indicates claim success. Reuse the same idempotencyKey and body for identical retries; wallet receipts may replay a historical success without re-evaluating gates.",
   {
     verfiID: z.string().describe("Verfi session ID to claim"),
     expirationDate: z.string().optional().describe("Optional ISO expiration, default 3 years, maximum 5."),
+    requirePII: z.array(z.enum(["email", "phone"])).min(1).max(2).refine(fields => new Set(fields).size === fields.length).optional().describe("Every selected field must match (AND). Requires corresponding hash."),
+    emailHash: z.string().regex(/^[a-f0-9]{64}$/).optional().describe("SHA-256 of exact captured UTF-8 email; select email in requirePII."),
+    phoneHash: z.string().regex(/^[a-f0-9]{64}$/).optional().describe("SHA-256 of exact captured UTF-8 phone; select phone in requirePII."),
+    requireClaimMode: z.enum(["exclusive", "multi"]).optional().describe("Checks immutable publisher mode; does not change it."),
     requireRecording: z.boolean().optional().describe("Require valid recording; failure is 409 no_recording."),
     requireVerticals: z.array(z.string()).min(1).optional().describe("Any overlap with declared verticals passes. Select the vertical for this lead type."),
     requireVerifiedScore: z.number().min(0).max(1).optional().describe("Minimum cached metadata keyword score against declared starter verticals, not replay analysis."),
@@ -155,6 +159,12 @@ server.tool(
     idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/).optional().describe("Required for wallet-enrolled tenants. Persist per operation; reuse identical session/body on retries. UUID recommended."),
   },
   async ({ verfiID, idempotencyKey, ...options }) => {
+    for (const field of ["email", "phone"] as const) {
+      const selected = options.requirePII?.includes(field);
+      const supplied = options[`${field}Hash`] !== undefined;
+      if (selected && !supplied) return { ...textResult({ error: "invalid_pii_hash" }), isError: true };
+      if (supplied && !selected) return { ...textResult({ error: "invalid_pii_requirement" }), isError: true };
+    }
     const body = Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined));
     const { status, data } = await apiCall("POST", `/sessions/${encodeURIComponent(verfiID)}/claim`, body, idempotencyKey);
     return { ...textResult(data), isError: status >= 400 };
